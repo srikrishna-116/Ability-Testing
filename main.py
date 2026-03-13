@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from db.mongo import (
     questions_collection,
@@ -9,6 +11,9 @@ from adaptive.ability import update_ability
 from analysis.study_plan import generate_plan
 from analysis.weak_topic import find_weak_topics
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
 
 # -----------------------------
@@ -17,9 +22,9 @@ app = FastAPI()
 @app.get("/check_user/{user}")
 def check_user(user: str):
     session = session_collection.find_one({"user_id": user})
-    if session:
-        return {"exists": True}
-    return {"exists": False}
+    exists = bool(session)
+    logger.info("check_user: %s exists=%s", user, exists)
+    return {"exists": exists}
 
 
 @app.get("/session/{user}")
@@ -47,6 +52,7 @@ def session_info(user: str):
 def create_user(user: str):
     session = session_collection.find_one({"user_id": user})
     if session:
+        logger.info("create_user: %s already exists", user)
         return {"msg": "user exists"}
 
     new_session = {
@@ -61,6 +67,7 @@ def create_user(user: str):
         "attempts": 1,
     }
     session_collection.insert_one(new_session)
+    logger.info("create_user: %s created", user)
     return {"msg": "user created"}
 
 # -----------------------------
@@ -70,11 +77,13 @@ def create_user(user: str):
 def get_question(user: str):
     session = session_collection.find_one({"user_id": user})
     if not session:
+        logger.warning("get_question: user not found (%s)", user)
         return {"error": "user not found"}
 
     answered = [a["question"] for a in session.get("answers", [])]
     q = questions_collection.find_one({"question": {"$nin": answered}})
     if not q:
+        logger.info("get_question: no new question for user %s", user)
         return {"error": "no new question available"}
 
     # Save last question in session
@@ -83,6 +92,7 @@ def get_question(user: str):
         {"$set": {"last_question": q["question"]}}
     )
 
+    logger.info("get_question: served question for user %s", user)
     return {
         "question": q["question"],
         "options": q["options"]
@@ -95,16 +105,19 @@ def get_question(user: str):
 def answer(user: str, ans: str):
     session = session_collection.find_one({"user_id": user})
     if not session:
+        logger.warning("answer: user not found (%s)", user)
         return {"error": "user not found"}
 
     ability = session["ability"]
     last_q_text = session.get("last_question")
 
     if not last_q_text:
+        logger.warning("answer: no question asked yet for user %s", user)
         return {"error": "no question asked yet"}
 
     q = questions_collection.find_one({"question": last_q_text})
     if not q or "correct_answer" not in q:
+        logger.error("answer: invalid question data for user %s, question=%s", user, last_q_text)
         return {"error": "invalid question data"}
 
     correct = ans == q["correct_answer"]
@@ -128,6 +141,7 @@ def answer(user: str, ans: str):
         }
     )
 
+    logger.info("answer: user=%s question=%s correct=%s new_ability=%.3f", user, last_q_text, correct, new_ability)
     return {"correct": correct, "ability": new_ability}
 
 # -----------------------------
@@ -139,12 +153,14 @@ def answer(user: str, ans: str):
 def plan(user: str):
     session = session_collection.find_one({"user_id": user})
     if not session:
+        logger.warning("plan: user not found (%s)", user)
         return {"error": "user not found"}
 
     # Check if at least 10 questions have been answered
     answered_questions = len(session.get("answers", []))
 
     if answered_questions < 10:
+        logger.info("plan: not enough answers for user %s (%d answered)", user, answered_questions)
         return {"msg": "Complete at least 10 questions to see your study plan."}
 
     # Compute weak topics for the current attempt (updates session weak_topics)
@@ -171,6 +187,7 @@ def plan(user: str):
         "new_weak_topics": weak,
     }
 
+    logger.info("plan: generated plan for user %s (answered=%d)", user, answered_questions)
     return {
         "plan": study_plan,
         "weak_topics": weak,
@@ -201,6 +218,7 @@ def refresh(user: str):
                 "$inc": {"attempts": 1}
             },
         )
+        logger.info("refresh: refreshed session for user %s", user)
     else:
         # Create new session if missing
         new_session = {
@@ -213,5 +231,6 @@ def refresh(user: str):
             "previous_ability": 0.5,
         }
         session_collection.insert_one(new_session)
+        logger.info("refresh: created session for new user %s", user)
 
     return {"msg": "session refreshed"}

@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# ability_testing_training
-AI-powered Adaptive Testing System: Dynamically selects questions based on user performance, generates personalized study plans, and tracks answers via REST API. Built with Python &amp; FastAPI, it uses AI tools for development while keeping API keys secure via environment variables.
-=======
 # Adaptive Testing System
 
 An intelligent adaptive testing platform built with FastAPI, MongoDB, and Groq AI that personalizes learning experiences through dynamic question selection and AI-generated study plans.
@@ -22,7 +18,9 @@ An intelligent adaptive testing platform built with FastAPI, MongoDB, and Groq A
 - **AI**: Groq API (Llama 3.1 model)
 - **Environment**: Python virtual environment with dotenv for secrets
 
-## Installation
+---
+
+## Quick Start
 
 1. **Clone the repository**
    ```bash
@@ -39,7 +37,7 @@ An intelligent adaptive testing platform built with FastAPI, MongoDB, and Groq A
 
 3. **Install dependencies**
    ```bash
-   pip install fastapi pymongo groq python-dotenv uvicorn
+   pip install -r requirements.txt
    ```
 
 4. **Configure environment variables**
@@ -53,22 +51,60 @@ An intelligent adaptive testing platform built with FastAPI, MongoDB, and Groq A
    python seed_question.py
    ```
 
-## Usage
-
-1. **Start the server**
+6. **Start the server**
    ```bash
    uvicorn main:app --reload
    ```
 
-2. **API Endpoints**
+---
 
-   - `GET /check_user/{user}` - Check if user exists
-   - `POST /create_user/{user}` - Create new user session
-   - `GET /question/{user}` - Get next adaptive question
-   - `POST /answer` - Submit answer and update ability
-   - `GET /plan/{user}` - Generate personalized study plan (requires 10+ questions)
-   - `POST /refresh/{user}` - Reset session for retake
-   - `GET /session/{user}` - Get session information
+## API Endpoints
+
+- `GET /check_user/{user}` - Check if user exists
+- `POST /create_user/{user}` - Create new user session
+- `GET /question/{user}` - Get next adaptive question
+- `POST /answer` - Submit answer and update ability
+- `GET /plan/{user}` - Generate personalized study plan (requires 10+ questions)
+- `POST /refresh/{user}` - Reset session for retake
+- `GET /session/{user}` - Get session information
+
+---
+
+## Logging & Debugging
+
+This project uses FastAPI / Uvicorn logging by default. To increase verbosity for debugging, run the server with a higher log level:
+
+```bash
+uvicorn main:app --reload --log-level debug
+```
+
+### Where to look for runtime issues
+
+- **MongoDB connectivity**: Verify `MONGO_URL` in `.env` and that MongoDB is running.
+- **Missing environment variables**: Ensure `GROQ_API_KEY` is set if you want to generate study plans.
+- **Study plan generation**: Requires at least 10 submitted answers; otherwise the endpoint returns a message asking you to complete more questions.
+
+---
+
+## Common Issues & Troubleshooting
+
+### 1) Server fails to start
+
+- Make sure your virtual environment is activated.
+- Confirm dependencies are installed (`pip install -r requirements.txt`).
+- Check the console for stack traces, especially for MongoDB connection errors.
+
+### 2) API returns `user not found`
+
+- Create a user first using `POST /create_user/{user}`.
+- Ensure the `user` path parameter matches exactly (case-sensitive).
+
+### 3) Study plan not generating
+
+- The `/plan/{user}` endpoint requires at least **10 answered questions**.
+- If you see "Complete at least 10 questions to see your study plan", continue answering questions via `/question/{user}` + `/answer`.
+
+---
 
 ## Project Structure
 
@@ -88,15 +124,7 @@ An intelligent adaptive testing platform built with FastAPI, MongoDB, and Groq A
 └── ui.py                   # User interface components
 ```
 
-## Configuration
-
-The application uses environment variables for sensitive data:
-
-- `MONGO_URL`: MongoDB connection string
-- `DB_NAME`: Database name (default: adaptive_test)
-- `GROQ_API_KEY`: API key for Groq AI service
-
-Copy `.env.example` to `.env` and fill in your values.
+---
 
 ## Contributing
 
@@ -106,7 +134,8 @@ Copy `.env.example` to `.env` and fill in your values.
 4. Test thoroughly
 5. Submit a pull request
 
+---
+
 ## License
 
 This project is open source. Please check the license file for details.
->>>>>>> 294a81c (First Python project commit)
