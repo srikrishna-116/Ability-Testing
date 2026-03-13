@@ -87,7 +87,7 @@ def get_question(user: str):
         "question": q["question"],
         "options": q["options"]
     }
-
+ 
 # -----------------------------
 # ANSWER
 # -----------------------------
