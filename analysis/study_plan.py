@@ -1,8 +1,8 @@
 from groq import Groq
 from db.mongo import session_collection
-from config import API_key
+from config import API_KEY
 
-client = Groq(api_key=API_key)
+client = Groq(api_key=API_KEY)
 
 def generate_plan(user):
     session = session_collection.find_one({"user_id": user})
