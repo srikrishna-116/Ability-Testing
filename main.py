@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from db.mongo import (
     questions_collection,
     session_collection
@@ -24,6 +24,12 @@ def root():
         "msg": "Adaptive Learning System API is running. Visit /docs for API documentation.",
         "status": "ok",
     }
+
+
+@app.head("/")
+def root_head():
+    """Support HEAD requests for the root path (useful for health checks)."""
+    return Response(status_code=200)
 
 # -----------------------------
 # CHECK USER
