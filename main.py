@@ -234,3 +234,35 @@ def refresh(user: str):
         logger.info("refresh: created session for new user %s", user)
 
     return {"msg": "session refreshed"}
+
+
+if __name__ == "__main__":
+    """Run both the FastAPI server and the Streamlit UI when executing this file directly.
+
+    Usage:
+        python main.py
+
+    This will start:
+      - FastAPI app on http://localhost:8000
+      - Streamlit UI on http://localhost:8501
+    """
+
+    import subprocess
+    import sys
+
+    # Run uvicorn and streamlit in parallel subprocesses
+    procs = []
+    try:
+        procs.append(subprocess.Popen([sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]))
+        procs.append(subprocess.Popen([sys.executable, "-m", "streamlit", "run", "ui.py", "--server.port", "8501"]))
+
+        # Wait for both processes to exit (they run until interrupted)
+        for p in procs:
+            p.wait()
+    except KeyboardInterrupt:
+        # Clean up on Ctrl+C
+        for p in procs:
+            if p.poll() is None:
+                p.terminate()
+        for p in procs:
+            p.wait()
