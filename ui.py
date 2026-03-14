@@ -9,6 +9,16 @@ import altair as alt
 # Locally, it defaults to localhost:8000.
 API = os.getenv("API_URL", "http://localhost:8000")
 
+
+def _safe_json(resp):
+    """Parse response JSON safely, showing an error in Streamlit if it fails."""
+    try:
+        return resp.json()
+    except Exception as e:
+        st.error(f"API returned invalid JSON (status {resp.status_code}): {e}")
+        st.text(resp.text[:1000])
+        return {}
+
 st.set_page_config(page_title="Adaptive Learning System", layout="centered")
 st.title("📘 Adaptive Learning System")
 
@@ -141,11 +151,16 @@ with st.sidebar:
 # -----------------------------
 if user and st.button("🔍 Check User"):
     r = requests.get(f"{API}/check_user/{user}")
-    data = r.json()
+    data = _safe_json(r)
+    if not data:
+        st.stop()
+
     if data.get("exists"):
         # Fetch session details to see if a previous test exists
         session_r = requests.get(f"{API}/session/{user}")
-        session_data = session_r.json()
+        session_data = _safe_json(session_r)
+        if not session_data:
+            st.stop()
         answered = session_data.get("answered", 0)
 
         st.success(f"✅ Welcome back, {user}! You can start your test.")
@@ -181,7 +196,9 @@ if user and st.session_state.user_missing:
         st.session_state.q = None
         # Fetch first question right away
         r = requests.get(f"{API}/question/{user}")
-        q = r.json()
+        q = _safe_json(r)
+        if not q:
+            st.stop()
         if "error" not in q:
             st.session_state.q = q
 
@@ -203,7 +220,9 @@ if st.session_state.user_exists and st.session_state.count >= st.session_state.m
         st.session_state.q = None
         st.session_state.previous_test = False
         r = requests.get(f"{API}/question/{user}")
-        q = r.json()
+        q = _safe_json(r)
+        if not q:
+            st.stop()
         if "error" not in q:
             st.session_state.q = q
 
@@ -219,13 +238,17 @@ if st.session_state.user_exists:
 
     if st.session_state.count == 0 and st.button("🚀 Start Test"):
         r = requests.get(f"{API}/question/{user}")
-        q = r.json()
+        q = _safe_json(r)
+        if not q:
+            st.stop()
         if "error" not in q:
             st.session_state.q = q
     elif st.session_state.count > 0 and st.session_state.count < st.session_state.max_q and st.session_state.q is None:
         if st.button("▶️ Continue Test"):
             r = requests.get(f"{API}/question/{user}")
-            q = r.json()
+            q = _safe_json(r)
+            if not q:
+                st.stop()
             if "error" not in q:
                 st.session_state.q = q
 
@@ -249,16 +272,22 @@ if st.session_state.user_exists:
 
                 # Try to get next question
                 r = requests.get(f"{API}/question/{user}")
-                q = r.json()
+                q = _safe_json(r)
+                if not q:
+                    st.stop()
+
                 if "error" not in q:
                     st.session_state.q = q
                 else:
                     st.session_state.q = None
                     st.success("🎯 You have answered all questions!")
-                    
+
                     # Fetch study plan only after test completion
                     r = requests.get(f"{API}/plan/{user}")
-                    data = r.json()
+                    data = _safe_json(r)
+                    if not data:
+                        st.stop()
+
                     plan_text = data.get("plan")
                     weak_topics = data.get("weak_topics")
                     answers = data.get("answers", [])
@@ -311,7 +340,9 @@ if st.session_state.user_exists and st.session_state.count > 0:
         st.info("You have a previous plan saved. Retake the test to generate a new plan.")
     elif st.button("📖 View Study Plan"):
         r = requests.get(f"{API}/plan/{user}")
-        data = r.json()
+        data = _safe_json(r)
+        if not data:
+            st.stop()
         plan_text = data.get("plan")
         weak_topics = data.get("weak_topics")
         answers = data.get("answers", [])
