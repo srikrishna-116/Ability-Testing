@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+
+@app.get("/")
+def root():
+    """Root endpoint so the service responds at the base URL."""
+    return {
+        "msg": "Adaptive Learning System API is running. Visit /docs for API documentation.",
+        "status": "ok",
+    }
+
 # -----------------------------
 # CHECK USER
 # -----------------------------
@@ -237,24 +246,36 @@ def refresh(user: str):
 
 
 if __name__ == "__main__":
-    """Run both the FastAPI server and the Streamlit UI when executing this file directly.
+    """Run the FastAPI server (and optionally the Streamlit UI) when executing this file.
 
     Usage:
         python main.py
 
-    This will start:
+    By default this starts:
       - FastAPI app on http://localhost:8000
-      - Streamlit UI on http://localhost:8501
+      - (Optional) Streamlit UI on http://localhost:8501 if STREAMLIT=1 is set and streamlit is installed
+
+    When deploying (e.g., on Render), prefer using a start command like:
+      uvicorn main:app --host 0.0.0.0 --port 8000
     """
 
+    import os
     import subprocess
     import sys
 
-    # Run uvicorn and streamlit in parallel subprocesses
     procs = []
     try:
+        # Always start the API server
         procs.append(subprocess.Popen([sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]))
-        procs.append(subprocess.Popen([sys.executable, "-m", "streamlit", "run", "ui.py", "--server.port", "8501"]))
+
+        # Optionally start the Streamlit UI if requested and installed
+        run_ui = os.getenv("STREAMLIT", "1").lower() not in ("0", "false", "no")
+        if run_ui:
+            try:
+                # If streamlit is not installed, this will raise FileNotFoundError
+                procs.append(subprocess.Popen([sys.executable, "-m", "streamlit", "run", "ui.py", "--server.port", "8501"]))
+            except FileNotFoundError:
+                logger.warning("Streamlit not installed; skipping UI start.")
 
         # Wait for both processes to exit (they run until interrupted)
         for p in procs:
