@@ -96,10 +96,21 @@ def get_question(user: str):
         return {"error": "user not found"}
 
     answered = [a["question"] for a in session.get("answers", [])]
-    q = questions_collection.find_one({"question": {"$nin": answered}})
-    if not q:
+
+    # Limit to 10 questions per test run
+    if len(answered) >= 10:
+        logger.info("get_question: user %s already answered 10 questions", user)
+        return {"error": "max_questions_reached"}
+
+    # Pick a random question that the user hasn't answered yet.
+    # Using aggregation with $sample gives a random document.
+    pipeline = [{"$match": {"question": {"$nin": answered}}}, {"$sample": {"size": 1}}]
+    results = list(questions_collection.aggregate(pipeline))
+    if not results:
         logger.info("get_question: no new question for user %s", user)
         return {"error": "no new question available"}
+
+    q = results[0]
 
     # Save last question in session
     session_collection.update_one(

@@ -4,6 +4,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import altair as alt
+from rag import ask_question
 
 # When deployed, set API_URL to the backend's public URL (e.g., Render service URL).
 # Locally, it defaults to localhost:8000.
@@ -126,6 +127,8 @@ if "q" not in st.session_state:
     st.session_state.q = None
 if "ans" not in st.session_state:
     st.session_state.ans = ""
+if "show_plan" not in st.session_state:
+    st.session_state.show_plan = False
 
 # Sidebar for additional info
 with st.sidebar:
@@ -169,6 +172,11 @@ if user and st.button("🔍 Check User"):
         st.session_state.count = answered
         st.session_state.previous_test = session_data.get("has_previous", False)
         st.session_state.attempts = session_data.get("attempts", 1)
+        if st.session_state.count >= st.session_state.max_q:
+            st.session_state.q = None
+            st.session_state.show_plan = True
+        else:
+            st.session_state.show_plan = False
     else:
         st.warning("⚠️ User not found. Create a new user to start the test.")
         st.session_state.user_exists = False
@@ -194,6 +202,7 @@ if user and st.session_state.user_missing:
         st.session_state.user_missing = False
         st.session_state.count = 0
         st.session_state.q = None
+        st.session_state.show_plan = False
         # Fetch first question right away
         r = requests.get(f"{API}/question/{user}")
         q = _safe_json(r)
@@ -210,6 +219,7 @@ if st.session_state.user_exists and st.button("🔄 Refresh Session"):
     st.success("Session refreshed!")
     st.session_state.count = 0
     st.session_state.q = None
+    st.session_state.show_plan = False
 
 # If user has a previous full test, allow a retake
 if st.session_state.user_exists and st.session_state.count >= st.session_state.max_q:
@@ -219,6 +229,7 @@ if st.session_state.user_exists and st.session_state.count >= st.session_state.m
         st.session_state.count = 0
         st.session_state.q = None
         st.session_state.previous_test = False
+        st.session_state.show_plan = False
         r = requests.get(f"{API}/question/{user}")
         q = _safe_json(r)
         if not q:
@@ -262,67 +273,77 @@ if st.session_state.user_exists:
             for i, opt in enumerate(options):
                 st.write(f"{chr(65+i)}. {opt}")
             
-            ans = st.radio("Select your answer:", options, key="answer_radio")
+            ans = st.radio("Select your answer:", options, key=f"answer_radio_{st.session_state.count}")
             
             submitted = st.form_submit_button("✅ Submit Answer")
             
             if submitted:
+                # Record the answer
                 requests.post(f"{API}/answer", params={"user": user, "ans": ans})
                 st.session_state.count += 1
 
-                # Try to get next question
-                r = requests.get(f"{API}/question/{user}")
-                q = _safe_json(r)
-                if not q:
-                    st.stop()
-
-                if "error" not in q:
-                    st.session_state.q = q
-                else:
+                # Once we reach the max number of questions, stop fetching more and show the plan
+                if st.session_state.count >= st.session_state.max_q:
                     st.session_state.q = None
-                    st.success("🎯 You have answered all questions!")
-
-                    # Fetch study plan only after test completion
-                    r = requests.get(f"{API}/plan/{user}")
-                    data = _safe_json(r)
-                    if not data:
+                    st.session_state.show_plan = True
+                else:
+                    # Try to get next question
+                    r = requests.get(f"{API}/question/{user}")
+                    q = _safe_json(r)
+                    if not q:
                         st.stop()
 
-                    plan_text = data.get("plan")
-                    weak_topics = data.get("weak_topics")
-                    answers = data.get("answers", [])
-
-                    if plan_text:
-                        st.subheader("📖 Study Plan")
-                        st.write(plan_text)
-                        st.session_state.previous_test = True
-
-                        # Compare with previous attempt if available
-                        comparison = data.get("comparison", {})
-                        if comparison:
-                            st.subheader("🔍 Test Comparison")
-                            st.write(f"• Previous correct: {comparison.get('prev_correct')} vs New correct: {comparison.get('new_correct')}")
-                            st.write(f"• Previous ability: {comparison.get('prev_ability')} vs New ability: {comparison.get('new_ability')}")
-                            st.write(f"• Previous weak topics: {', '.join(comparison.get('prev_weak_topics', []))}")
-                            st.write(f"• New weak topics: {', '.join(comparison.get('new_weak_topics', []))}")
-
-                        if weak_topics:
-                            st.subheader("⚠️ Weak Topics")
-                            st.write(", ".join(weak_topics))
-
-                        if answers:
-                            st.subheader("📊 Performance by Topic")
-                            df = pd.DataFrame(answers)
-                            chart = alt.Chart(df).mark_bar().encode(
-                                x="topic",
-                                y="count()",
-                                color=alt.condition(
-                                    alt.datum.correct, alt.value("green"), alt.value("red")
-                                )
-                            ).properties(width=600)
-                            st.altair_chart(chart, use_container_width=True)
+                    if "error" not in q:
+                        st.session_state.q = q
                     else:
-                        st.error("Plan not generated")
+                        st.session_state.q = None
+                        st.session_state.show_plan = True
+
+            # When we've completed the test, show the plan
+            if st.session_state.show_plan and st.session_state.count >= st.session_state.max_q:
+                st.success("🎯 You have answered all questions!")
+
+                # Fetch study plan only after test completion
+                r = requests.get(f"{API}/plan/{user}")
+                data = _safe_json(r)
+                if not data:
+                    st.stop()
+
+                plan_text = data.get("plan")
+                weak_topics = data.get("weak_topics")
+                answers = data.get("answers", [])
+
+                if plan_text:
+                    st.subheader("📖 Study Plan")
+                    st.write(plan_text)
+                    st.session_state.previous_test = True
+
+                    # Compare with previous attempt if available
+                    comparison = data.get("comparison", {})
+                    if comparison:
+                        st.subheader("🔍 Test Comparison")
+                        st.write(f"• Previous correct: {comparison.get('prev_correct')} vs New correct: {comparison.get('new_correct')}")
+                        st.write(f"• Previous ability: {comparison.get('prev_ability')} vs New ability: {comparison.get('new_ability')}")
+                        st.write(f"• Previous weak topics: {', '.join(comparison.get('prev_weak_topics', []))}")
+                        st.write(f"• New weak topics: {', '.join(comparison.get('new_weak_topics', []))}")
+
+                    if weak_topics:
+                        st.subheader("⚠️ Weak Topics")
+                        st.write(", ".join(weak_topics))
+
+                    if answers:
+                        st.subheader("📊 Performance by Topic")
+                        df = pd.DataFrame(answers)
+                        chart = alt.Chart(df).mark_bar().encode(
+                            x="topic",
+                            y="count()",
+                            color=alt.condition(
+                                alt.datum.correct, alt.value("green"), alt.value("red")
+                            )
+                        ).properties(width=600)
+                        st.altair_chart(chart, use_container_width=True)
+                else:
+                    st.error("Plan not generated")
 
 # -----------------------------
 # FLOWCHART REPRESENTATION
@@ -377,3 +398,18 @@ if st.session_state.user_exists and st.session_state.count > 0:
                 st.altair_chart(chart, use_container_width=True)
         else:
             st.error("Plan not generated")
+
+
+st.subheader("🤖 Ask About This System")
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = ""
+
+query = st.text_input("Ask something about the system:")
+
+if query:
+    answer = ask_question(query, st.session_state.chat_history)
+
+    st.session_state.chat_history += f"\nYou: {query}\nBot: {answer}"
+
+    st.write("🤖 AI:", answer)
